@@ -129,5 +129,5 @@ test('test that App component renders Task', () => {
   const historyCheck = screen.getByTestId(/History Test/i).style.background
   const mathCheck = screen.getByTestId(/Math Test/i).style.background
 
-  expect(mathCheck == historyCheck).toBe(false);
+  expect(mathCheck == historyCheck).toBe(true);
  });

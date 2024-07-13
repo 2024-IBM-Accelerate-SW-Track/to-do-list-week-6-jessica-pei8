@@ -5,7 +5,7 @@ const express = require("express"),
 const bodyParser = require('body-parser');
 const fsPromises = require("fs").promises;
 const todoDBName = "tododb";
-const useCloudant = false;
+const useCloudant = true;
 
 
 
@@ -40,7 +40,23 @@ async function addItem (request, response) {
         
         if (useCloudant) {
             //begin here for cloudant
-
+                        // Setting `_id` for the document is optional when "postDocument" function is used for CREATE.
+            // When `_id` is not provided the server will generate one for your document.
+            const todoDocument = { _id: id.stringify };
+          
+            // Add "name" and "joined" fields to the document
+            todoDocument['task'] = task;
+            todoDocument.curDate = curDate;
+            todoDocument.dueDate = dueDate;
+          
+            // Save the document in the database with "postDocument" function
+            const client = CloudantV1.newInstance({});
+            console.log('Writing to: ', todoDBName)
+            const createDocumentResponse = await client.postDocument({
+              db: todoDBName,
+              document: todoDocument,
+            });
+            console.log('Successfully wrote to cloudant DB');
             
         } else {
             //write to local file
@@ -57,20 +73,90 @@ async function addItem (request, response) {
     }
 }
 
+ 
+
 //** week 6, get all items from the json database*/
 app.get("/get/items", getItems)
 async function getItems (request, response) {
     //begin here
 
-};
+    //begin cloudant here
+    if (useCloudant) {
+    //add for cloudant client
+    const client = CloudantV1.newInstance({});
+    var listofdocs;
+    await client.postAllDocs({
+        db: todoDBName,
+        includeDocs: true
+    }).then(response => {
+        listofdocs=response.result;
+        });
+    response.json(JSON.stringify(listofdocs));
+    }
+    else {
+    //for non-cloudant use-case
+    var data = await fsPromises.readFile("database.json");
+    response.json(JSON.parse(data));
+    }
 
+};
 //** week 6, search items service */
 app.get("/get/searchitem", searchItems) 
 async function searchItems (request, response) {
     //begin here
+    var searchField = request.query.taskname;
 
+    if (useCloudant){
+        const client = CloudantV1.newInstance({});
+        var search_results
+        await client.postSearch({
+            db: todoDBName,
+            ddoc: 'newSearch',
+            query: 'task:'+searchField,
+            index: 'newSearch'
+          }).then(response => {
+            search_results=response.result;
+            console.log(response.result);
+          });
+        console.log(search_results);
+        response.json(JSON.stringify(search_results));
+        
+    }
+    else {
+    var json = JSON.parse (await fsPromises.readFile("database.json"));
+    var returnData = json.filter(jsondata => jsondata.Task === searchField);
+    response.json(returnData);
+    }
 };
 
-
 // Add initDB function here
+const {CloudantV1} = require('@ibm-cloud/cloudant');
+if (useCloudant)
+{
+    initDB();
+}
 
+async function initDB ()
+{
+    //TODO --- Insert to create DB
+    //See example at https://www.npmjs.com/package/@ibm-cloud/cloudant#authentication-with-environment-variables for how to create db
+    
+    try {
+        const todoDBName = "tododb";
+        const client = CloudantV1.newInstance({});
+        const putDatabaseResult = (
+        await client.putDatabase({
+        db: todoDBName,
+      })
+    ).result;
+    if (putDatabaseResult.ok) {
+      console.log(`"${todoDBName}" database created.`);
+    }
+  } catch (err) {
+   
+      console.log(
+        `Cannot create "${todoDBName}" database, err: "${err.message}".`
+      );
+
+  }
+};
